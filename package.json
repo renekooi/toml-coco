@@ -1,0 +1,13 @@
+{
+  'name': 'toml-coco',
+  'version': '0.1.0',
+  'main': 'toml.co',
+  'description': '100-line Toml parser in Coco',
+  'author': 'rene@kooi.me',
+  'repository': "git://github.com/renekooi/toml-coco.git",
+  'license': 'MIT',
+  'devDependencies': {
+    'yaml': '~0.2'
+  },
+  'keywords': ['toml', 'parser']
+}
