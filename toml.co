@@ -1,0 +1,103 @@
+SKIP = /^#.*\n[^\S\n]*|^[^\S\n]+/
+NEWL = /^\n+/
+STR = /^"([^\\"]*(?:\\[\s\S][^\\"]*)*)"/
+GROUP = /^\[([\w\d][\w\d\.]+[\w\d])\]/
+NUM = /^-?\d+(\.\d+)?/
+BOOL = /^true|false/
+DATE = // ^
+  \d{4} -
+  (0\d|1[012]) -
+  ([012]\d|3[01]) T
+  ([01]\d|2[01234]) :
+  ([012345]\d) :
+  ([012345]\d) Z
+//
+ID = /^\w[\w\d]+/
+ARR_OPEN  = /^\[/
+ARR_CLOSE = /^\]/
+
+function err msg, tok => throw Error "#msg at line #{tok.line}"
+
+function is-value tok => tok.type of <[ string datetime number boolean ]>
+
+function set ctx, key, val
+  key /= \.
+  fkey = key.pop!
+  for key => ctx = ctx@[&]
+  ctx[fkey] = val
+
+function tokenize str, stack
+  switch
+  case SKIP.exec      str => {+skip, m: that.0}
+  case m = NEWL.exec  str
+    stack.line += m.0.length
+    {m: m.0} <<< if stack.in-arr < 1
+                 then {value: m.0, type: \delim}
+                 else {+skip}
+  case STR.exec       str => m: that.0, value: that.1,                  type: \string
+  case DATE.exec      str => m: that.0, value: (new Date that.0),       type: \datetime
+  case NUM.exec       str => m: that.0, value: (parseFloat that.0),     type: \number
+  case BOOL.exec      str => m: that.0, value: { true, false }[that.0], type: \boolean
+  case GROUP.exec     str => m: that.0, value: that.1,                  type: \group
+  case ARR_OPEN.exec  str => stack.in-arr++; m: that.0, value: \[       type: \arr_open
+  case ARR_CLOSE.exec str => stack.in-arr--; m: that.0, value: \]       type: \arr_close
+  case ID.exec        str => m: that.0, value: that.0,                  type: \id
+  case str.char-at! is \= => m: \=      value: \=                       type: \assign
+  case str.char-at! is \, => m: \,      value: \,                       type: \sep
+
+function lex str
+  str += \\n
+  stack = [] <<< in-arr: 0 line: 0
+  while str.length > 0
+    token = tokenize str, stack
+    str.=slice token.m.length
+    stack.push token{value, type} <<< stack{line} unless token.skip
+  stack
+
+function parse-array stack
+  arr = []
+  type = void
+  expects = true
+  while tok = stack.shift!
+    if tok.type is \arr_open
+      arr.push parse-array stack
+      expects = false
+    else if tok.type is \arr_close
+      return arr
+    else if tok.type is \sep and not expects
+      expects = true
+    else if is-value tok and expects
+      {type} ?= tok
+      if tok.type is type
+      then arr.push tok.value; expects = false
+      else err "Inconsistent types in array" tok
+    else err "Unexpected #{tok.type}" tok
+
+function parse stack
+  stack = lex stack if typeof stack is \string
+  obj = {}
+  key = group = ''
+  while tok = stack.shift!
+    switch tok.type
+    case \group =>
+      # detect dupe prop
+      sub = obj; parts = tok.value / '.'
+      for parts
+        switch typeof sub[&]
+        case \object => sub.=[&]
+        case \undefined => break
+        default => err "Duplicate property `#group#&`" tok
+      group = tok.value + \.
+    case \id => key = (if group then group else '') + tok.value
+    case \assign => err "Unexpected assign" tok unless last is \id
+    case \arr_open =>
+      if last is \assign
+      then set obj, key, parse-array stack
+    case \string \number \bool \date =>
+      if last is \assign
+      then set obj, key, tok.value
+      else err "Unexpected value" tok
+    last = that.type
+  obj
+
+export lex, parse
