@@ -30,7 +30,7 @@ function is-value tok => tok.type of <[ string datetime number boolean ]>
   ctx[fkey] = val
 
 function lex str
-  tok = !-> stack.push @@{ type: 0 value: 1 line }
+  tok = !-> stack.push { type: @@0, value: @@1, line }
   # lazy hack to fix comments on the last line (see SKIP regex)
   str += \\n
   stack = []
