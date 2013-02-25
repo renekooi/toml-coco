@@ -45,6 +45,12 @@ enabled = true
 
 [clients]
 data = [ ["gamma", "delta"], [1, 2] ] # just an update to make sure parsers support it
+
+# Line breaks are OK when inside arrays
+hosts = [
+  "alpha",
+  "omega"
+]
 ```
 
 Spec
@@ -75,8 +81,8 @@ Primitives
 
 String, Integer, Float, Boolean, Datetime, Array.
 
-Strings are UTF8 surrounded by double quotes. Quotes and other special
-characters must be escaped.
+Strings are single-line values surrounded by double quotes encoded in UTF-8.
+Quotes and other special characters must be escaped.
 
 ```toml
 "I'm a string. \"You can quote me\". Tab \t newline \n you get it."
@@ -91,6 +97,14 @@ Here is the list of special characters.
 \r - carriage return (0x0d)
 \" - quote           (0x22)
 \\ - backslash       (0x5c)
+```
+
+Other special characters are reserved and, if used, TOML should produce an
+error. This means paths on Windows will always have to use double backslashes.
+
+```toml
+wrong = "C:\Users\nodejs\templates" # note: doesn't produce a valid path
+right = "C:\\Users\\nodejs\\templates"
 ```
 
 Integers are bare numbers, all alone. Feeling negative? Do what's natural.
@@ -238,19 +252,31 @@ Implementations
 If you have an implementation, send a pull request adding to this list. Please
 note the commit SHA1 or version tag that your parser supports in your Readme.
 
+- C#/.NET - https://github.com/LBreedlove/Toml.net
+- C#/.NET - https://github.com/rossipedia/toml-net
+- Clojure (@lantiga) - https://github.com/lantiga/clj-toml
+- Clojure (@manicolosi) - https://github.com/manicolosi/clojoml
+- CoffeeScript (@biilmann) - https://github.com/biilmann/coffee-toml
+- Go (@thompelletier) - https://github.com/pelletier/go-toml
+- Go (@laurent22) - https://github.com/laurent22/toml-go
+- Java (@agrison) - https://github.com/agrison/jtoml
 - node.js - https://github.com/aaronblohowiak/toml
 - node.js/browser - https://github.com/ricardobeat/toml
 - node.js - https://github.com/BinaryMuse/toml-node
-- Ruby (@jm) - https://github.com/jm/toml (toml gem)
-- Ruby (@dirk) - https://github.com/dirk/toml-ruby (toml-ruby gem)
-- Ruby (@eMancu) - https://github.com/eMancu/toml_parser-ruby (toml_parser-ruby gem)
-- Ruby (@charliesome) - https://github.com/charliesome/toml2 (toml2 gem)
-- Python (@f03lipe) - https://github.com/f03lipe/toml-python
-- Python (@uiri) - https://github.com/uiri/toml
-- C#/.NET - https://github.com/rossipedia/toml-net
+- node.js (@redhotvengeance) - https://github.com/redhotvengeance/topl (topl npm package)
+- node.js/browser (@alexanderbeletsky) - https://github.com/alexanderbeletsky/toml-js (npm browser amd)
+- Objective C (@mneorr) - https://github.com/mneorr/toml-objc.git
+- Objective-C (@SteveStreza) - https://github.com/amazingsyco/TOML
+- Perl (@alexkalderimis) - https://github.com/alexkalderimis/config-toml.pl
+- Perl - https://github.com/dlc/toml
 - PHP (@leonelquinteros) - https://github.com/leonelquinteros/php-toml.git
 - PHP (@jimbomoss) - https://github.com/jamesmoss/toml
-- Java (@agrison) - https://github.com/agrison/jtoml
-- Clojure (@lantiga) - https://github.com/lantiga/clj-toml
-- Go (@thompelletier) - https://github.com/pelletier/go-toml
-- Coco (@renekooi) - https://github.com/renekooi/toml-coco
+- PHP (@coop182) - https://github.com/coop182/toml-php
+- PHP (@checkdomain) - https://github.com/checkdomain/toml
+- Python (@f03lipe) - https://github.com/f03lipe/toml-python
+- Python (@uiri) - https://github.com/uiri/toml
+- Python - https://github.com/bryant/pytoml
+- Ruby (@jm) - https://github.com/jm/toml (toml gem)
+- Ruby (@eMancu) - https://github.com/eMancu/toml_parser-ruby (toml_parser-ruby gem)
+- Ruby (@charliesome) - https://github.com/charliesome/toml2 (toml2 gem)
+- Scala - https://github.com/axelarge/tomelette
