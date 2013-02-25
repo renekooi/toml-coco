@@ -1,7 +1,7 @@
 SKIP = /^#.*\n[^\S\n]*|^[^\S\n]+/
 NEWL = /^\n+/
 STR = /^"([^\\"]*(?:\\[\s\S][^\\"]*)*)"/
-GROUP = /^\[([\w\d][\w\d\.]+[\w\d])\]/
+GROUP = /^\[([\w\d][\w\d\.]*)\]/
 NUM = /^-?\d+(\.\d+)?/
 BOOL = /^true|false/
 DATE = // ^
@@ -15,6 +15,8 @@ DATE = // ^
 ID = /^\w[\w\d]+/
 ARR_OPEN  = /^\[/
 ARR_CLOSE = /^\]/
+ASSIGN = 0x3d
+COMMA = 0x2c
 
 function err msg, tok => throw Error "#msg at line #{tok.line}"
 
@@ -26,32 +28,30 @@ function set ctx, key, val
   for key => ctx = ctx@[&]
   ctx[fkey] = val
 
-function tokenize str, stack
-  switch
-  case SKIP.exec      str => {+skip, m: that.0}
-  case m = NEWL.exec  str
-    stack.line += m.0.length
-    {m: m.0} <<< if stack.in-arr < 1
-                 then {value: m.0, type: \delim}
-                 else {+skip}
-  case STR.exec       str => m: that.0, value: that.1,                  type: \string
-  case DATE.exec      str => m: that.0, value: (new Date that.0),       type: \datetime
-  case NUM.exec       str => m: that.0, value: (parseFloat that.0),     type: \number
-  case BOOL.exec      str => m: that.0, value: { true, false }[that.0], type: \boolean
-  case GROUP.exec     str => m: that.0, value: that.1,                  type: \group
-  case ARR_OPEN.exec  str => stack.in-arr++; m: that.0, value: \[       type: \arr_open
-  case ARR_CLOSE.exec str => stack.in-arr--; m: that.0, value: \]       type: \arr_close
-  case ID.exec        str => m: that.0, value: that.0,                  type: \id
-  case str.char-at! is \= => m: \=      value: \=                       type: \assign
-  case str.char-at! is \, => m: \,      value: \,                       type: \sep
-
 function lex str
-  str += \\n
-  stack = [] <<< in-arr: 0 line: 0
-  while str.length > 0
-    token = tokenize str, stack
-    str.=slice token.m.length
-    stack.push token{value, type} <<< stack{line} unless token.skip
+  str += \\n; stack = [] <<< in-arr: 0 line: 0
+  tok = -> stack.push @@{ type: 0 value: 1 } <<< stack{line}
+  for ever
+    l = 0
+    switch
+    case SKIP.exec      str => l=that.0.length
+    case m = NEWL.exec  str =>
+      stack.line += m.0.length
+      tok \newline m.0 if stack.in-arr < 1
+      l=m.0.length
+    case STR.exec       str => tok \string   that.1;            l=that.0.length
+    case DATE.exec      str => tok \datetime new Date   that.0; l=that.0.length
+    case NUM.exec       str => tok \number   parseFloat that.0; l=that.0.length
+    case BOOL.exec      str => tok \boolean  { true, false }[that.0]; l=that.0.length
+    case ID.exec        str => tok \id       that.0;            l=that.0.length
+    case GROUP.exec     str => tok \group    that.1;            l=that.0.length
+    case ARR_OPEN.exec  str => stack.in-arr++; tok \arr_open \[;  l=1
+    case ARR_CLOSE.exec str => stack.in-arr--; tok \arr_close \]; l=1
+    case str.char-code-at! is ASSIGN => tok \assign \=;           l=1
+    case str.char-code-at! is COMMA  => tok \comma  \,;           l=1
+    default => err "Unexpected #{str.char-at!}"
+
+    break unless str.=slice l
   stack
 
 function parse-array stack
@@ -64,7 +64,7 @@ function parse-array stack
       expects = false
     else if tok.type is \arr_close
       return arr
-    else if tok.type is \sep and not expects
+    else if tok.type is \comma and not expects
       expects = true
     else if is-value tok and expects
       {type} ?= tok
@@ -88,15 +88,22 @@ function parse stack
         case \undefined => break
         default => err "Duplicate property `#group#&`" tok
       group = tok.value + \.
-    case \id => key = (if group then group else '') + tok.value
+    case \id =>
+      if last is \newline
+      then key = (group or '') + tok.value
+      else err "Unexpected key" tok
     case \assign => err "Unexpected assign" tok unless last is \id
     case \arr_open =>
       if last is \assign
       then set obj, key, parse-array stack
-    case \string \number \bool \date =>
+      else err "Unexpected value" tok
+    case \string \number \boolean \datetime =>
       if last is \assign
       then set obj, key, tok.value
       else err "Unexpected value" tok
+    case \newline =>
+      err "Expected value" tok if last is \assign
+    default => err "Unexpected `#{if tok.value is \n then \newline else tok.value}`" tok
     last = that.type
   obj
 
