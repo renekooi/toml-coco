@@ -8,9 +8,10 @@ DATE = // ^
   \d{4} -
   (0\d|1[012]) -
   ([012]\d|3[01]) T
-  ([01]\d|2[01234]) :
-  ([012345]\d) :
-  ([012345]\d) Z
+  ([01]\d|2[0-4]) :
+  ([0-5]\d) :
+  ([0-5]\d)
+  (\. \d{1,3})? Z
 //
 ID = /^\w[\w\d]+/
 ARR_OPEN  = /^\[/
@@ -18,35 +19,37 @@ ARR_CLOSE = /^\]/
 ASSIGN = 0x3d
 COMMA = 0x2c
 
-function err msg, tok => throw Error "#msg at line #{tok.line}"
+!function err msg, tok => throw Error "#msg at line #{tok.line}"
 
 function is-value tok => tok.type of <[ string datetime number boolean ]>
 
-function set ctx, key, val
+!function set ctx, key, val
   key /= \.
   fkey = key.pop!
   for key => ctx = ctx@[&]
   ctx[fkey] = val
 
 function lex str
-  str += \\n; stack = [] <<< in-arr: 0 line: 0
-  tok = -> stack.push @@{ type: 0 value: 1 } <<< stack{line}
+  tok = !-> stack.push @@{ type: 0 value: 1 line }
+  # lazy hack to fix comments on the last line (see SKIP regex)
+  str += \\n
+  stack = []
+  in-arr = line = l = 0
   for ever
-    l = 0
     switch
     case SKIP.exec      str => l=that.0.length
     case m = NEWL.exec  str =>
-      stack.line += m.0.length
-      tok \newline m.0 if stack.in-arr < 1
-      l=m.0.length
+      line += l=m.0.length
+      # skip newlines in arrays
+      tok \newline m.0 if in-arr < 1
     case STR.exec       str => tok \string   that.1;            l=that.0.length
     case DATE.exec      str => tok \datetime new Date   that.0; l=that.0.length
     case NUM.exec       str => tok \number   parseFloat that.0; l=that.0.length
     case BOOL.exec      str => tok \boolean  { true, false }[that.0]; l=that.0.length
     case ID.exec        str => tok \id       that.0;            l=that.0.length
     case GROUP.exec     str => tok \group    that.1;            l=that.0.length
-    case ARR_OPEN.exec  str => stack.in-arr++; tok \arr_open \[;  l=1
-    case ARR_CLOSE.exec str => stack.in-arr--; tok \arr_close \]; l=1
+    case ARR_OPEN.exec  str => in-arr++; tok \arr_open \[;  l=1
+    case ARR_CLOSE.exec str => in-arr--; tok \arr_close \]; l=1
     case str.char-code-at! is ASSIGN => tok \assign \=;           l=1
     case str.char-code-at! is COMMA  => tok \comma  \,;           l=1
     default => err "Unexpected #{str.char-at!}"
@@ -59,52 +62,63 @@ function parse-array stack
   type = void
   expects = true
   while tok = stack.shift!
-    if tok.type is \arr_open
+    if is-value tok and expects
+      # set type for this array
+      {type} ?= tok
+      # enforce single-typed array. don't expect a value
+      if tok.type is type
+      then arr.push tok.value; expects = false
+      else err "Inconsistent types in array" tok
+    else if tok.type is \comma and not expects
+      # expect a value
+      expects = true
+    else if tok.type is \arr_open
+      # subarray, don't expect a value
       arr.push parse-array stack
       expects = false
     else if tok.type is \arr_close
       return arr
-    else if tok.type is \comma and not expects
-      expects = true
-    else if is-value tok and expects
-      {type} ?= tok
-      if tok.type is type
-      then arr.push tok.value; expects = false
-      else err "Inconsistent types in array" tok
     else err "Unexpected #{tok.type}" tok
 
 function parse stack
-  stack = lex stack if typeof stack is \string
+  # lex first if the stack does not look like an array
+  stack = lex stack unless stack instanceof Array
   obj = {}
   key = group = ''
   while tok = stack.shift!
     switch tok.type
+    case \newline =>
+      # newlines come after values or groups or other whitespace
+      err "Expected value" tok if last is \assign
+    case \string \number \boolean \datetime =>
+      # values exist only after assigns (and in arrays but they're parsed elsewhere)
+      if last is \assign
+      then set obj, key, tok.value
+      else err "Unexpected value" tok
+    case \id =>
+      # IDs only exist at the start of a line
+      if last is \newline
+      then key = (group or '') + tok.value
+      else err "Unexpected key" tok
+    case \assign =>
+      # assignments can only occur on IDs
+      err "Unexpected assign" tok unless last is \id
+    case \arr_open =>
+      # arrays are values
+      if last is \assign
+      then set obj, key, parse-array stack
+      else err "Unexpected value" tok
     case \group =>
       # detect dupe prop
       sub = obj; parts = tok.value / '.'
       for parts
         switch typeof sub[&]
-        case \object => sub.=[&]
-        case \undefined => break
+        case \object => sub.=[&] # dig deeper
+        case \undefined => break # there's nothing here
         default => err "Duplicate property `#group#&`" tok
       group = tok.value + \.
-    case \id =>
-      if last is \newline
-      then key = (group or '') + tok.value
-      else err "Unexpected key" tok
-    case \assign => err "Unexpected assign" tok unless last is \id
-    case \arr_open =>
-      if last is \assign
-      then set obj, key, parse-array stack
-      else err "Unexpected value" tok
-    case \string \number \boolean \datetime =>
-      if last is \assign
-      then set obj, key, tok.value
-      else err "Unexpected value" tok
-    case \newline =>
-      err "Expected value" tok if last is \assign
     default => err "Unexpected `#{if tok.value is \n then \newline else tok.value}`" tok
-    last = that.type
+    last = tok.type
   obj
 
 export lex, parse
