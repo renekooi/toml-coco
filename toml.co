@@ -1,15 +1,9 @@
-# whitespace & comments
-SKIP = /^#.*\n[^\S\n]*|^[^\S\n]+/
-# newlines (ie. separators)
-NEWL = /^\n+/
-# strings
-STR = /^"([^\\"]*(?:\\[\s\S][^\\"]*)*)"/
-# group names
-GROUP = /^\[([^\[\]]+)\]/
-# ints or floats
-NUM = /^-?\d+(\.\d+)?/
-# booleans
-BOOL = /^true|false/
+SKIP = /^#.*\n[^\S\n]*|^[^\S\n]+/ # whitespace & comments
+NEWL = /^\n+/ # newlines (ie. separators)
+STR = /^"([^\\"\n]*(?:\\[\s\S][^\\"\n]*)*)"/ # strings
+GROUP = /^\[([^\[\]]+)\]/ # group names
+NUM = /^-?\d+(\.\d+)?/ # ints or floats
+BOOL = /^true|false/ # booleans
 # datetime
 DATE = // ^
   \d{4} -
@@ -20,34 +14,28 @@ DATE = // ^
   ([0-5]\d)
   (\. \d{1,3})? Z
 //
-# an id
-ID = /^(..*?)\s*=/
-# array characters `[` `]`
-ARR_OPEN  = 0x5b
-ARR_CLOSE = 0x5d
-# assignment character `=`
-ASSIGN = 0x3d
-# comma character `,` (in arrays)
-COMMA = 0x2c
-# hash character `#` (start of comment)
-HASH = 0x23
+ID = /^(..*?)\s*=/ # an identifier / key
+
+ARR_OPEN  = 0x5b # array open  char `[`
+ARR_CLOSE = 0x5d # array close char `]`
+ASSIGN    = 0x3d # assignment  char `=`
+COMMA     = 0x2c # comma       char `,` (in arrays)
+HASH      = 0x23 # comment     char `#`
 
 err = !(msg, tok) ->
   if tok
-    msg += " at line #{tok.line}"
+    msg += " on line #{tok.line}"
     if tok.ostr
-      msg += "\n#{ (that / \\n)[tok.line - 1] }\n#{ \- * (tok.column - 1) }^"
+      msg += "\n#{ (that / \\n)[tok.line - 1] }\n#{ \- * tok.column }^"
   e = Error msg
   throw e
-
-is-array-value = -> it.type of <[ string datetime integer float boolean ]>
 
 # recursively sets a property on an object:
 # set { d: 2 } 'a.b.c' 0 => { d: 2, a: { b: { c: 0 } } }
 set = !(ctx, key, val) ->
   key /= \.
   fkey = key.pop!
-  for key => ctx = ctx@[&]
+  for k of key => ctx = ctx@[k]
   ctx[fkey] = val
 
 lex = (str) ->
@@ -60,35 +48,35 @@ lex = (str) ->
   last = type: \newline
   # using import to hide ostr in console.log output... hackk :)
   tok = (type, value, extr = {}) -> stack.push last := ^{ostr} <<< { type: @@0, value: @@1, line, column } <<< extr; @@1
-  for ever
+  while str.=slice l =>
     switch
-    case SKIP.exec str =>
-      (line++; column = 0; if in-arr < 1 => tok \newline \\n) if that.0.char-code-at! is HASH
-      l=that.0.length
-    case m = NEWL.exec str =>
-      line += l=m.0.length
+    case m = SKIP.exec str ?.0 =>
+      # if this is a comment, advance a line and add a newline token if we're not in an array
+      l = m.length
+      if m.char-code-at! is HASH
+      then line++; column = 0; in-arr < 1 and tok \newline \\n
+      else column += l
+    case m = NEWL.exec str ?.0=>
+      line += l = m.length
       column = 0
       # only add newlines if we're not in an array
-      tok \newline m.0 if in-arr < 1
-    case STR.exec str => tok \string   that.1;          l=that.0.length
-    case DATE.exec str => tok \datetime new Date that.0; l=that.0.length
+      tok \newline m if in-arr < 1
+    case STR.exec str => tok \string that.1; column += l = that.0.length
+    case DATE.exec str => tok \datetime new Date that.0; column += l = that.0.length
     case m = NUM.exec str =>
       if m.1
       then tok \float parse-float m.0
       else tok \integer parse-int m.0, 10
       l=m.0.length
-    case BOOL.exec str => tok \boolean  that.0 is \true; l=that.0.length
-    case (last.type is \newline) and GROUP.exec str => tok \group that.1; l=that.0.length
-    case (last.type is \newline) and ID.exec str => l = tok \id that.1 .length
+    case BOOL.exec str => tok \boolean  that.0 is \true; column += l = that.0.length
+    case (last.type is \newline) and GROUP.exec str => tok \group that.1; column += l = that.0.length
+    case (last.type is \newline) and ID.exec str => column += l = tok \id that.1 .length
     # single character tokens
-    case str.char-code-at! is ARR_OPEN => in-arr++; tok \arr_open \[; l=1
-    case str.char-code-at! is ARR_CLOSE => in-arr--; tok \arr_close \]; l=1
-    case str.char-code-at! is ASSIGN => tok \assign \=; l=1
-    case str.char-code-at! is COMMA => tok \comma \,; l=1
+    case str.char-code-at! is ARR_OPEN  => in-arr++; tok \arr_open  \[; l = 1; column++
+    case str.char-code-at! is ARR_CLOSE => in-arr--; tok \arr_close \]; l = 1; column++
+    case str.char-code-at! is ASSIGN    => tok \assign \=; l = 1; column++
+    case str.char-code-at! is COMMA     => tok \comma  \,; l = 1; column++
     default => err "Unexpected #{str.char-at!}" {line, column, ostr}
-
-    column += l
-    break unless str.=slice l
   stack
 
 # parses an array stack until the top-level closing brace
@@ -97,51 +85,55 @@ parse-array = (stack) ->
   type = void
   expects = true
   while tok = stack.shift!
-    if is-array-value tok and expects
+    if expects and tok.type of <[ string datetime integer float boolean ]>
       # set type for this array
       {type} ?= tok
       # enforce single-typed array. don't expect a value
       if tok.type is type
       then arr.push tok.value; expects = false
-      else err "Unexpected #{tok.type}, expecting #type in array" tok
-    else if tok.type is \comma and not expects
+      else err "Unexpected #{tok.type} in array of #{type}s" tok
+    else if expects and tok.type is \arr_open
+      type = \array
+      # subarray, don't expect a value
+      if type is \array
+      then arr.push parse-array stack; expects = false
+      else err "Unexpected #{tok.type} in array of #{type}s" tok
+    else if not expects and tok.type is \comma
       # expect a value
       expects = true
-    else if tok.type is \arr_open
-      # subarray, don't expect a value
-      arr.push parse-array stack
-      expects = false
     else if tok.type is \arr_close
       return arr
     else err "Unexpected #{tok.type}" tok
+  false
 
 parse = (stack) ->
   # lex first if the stack does not look like an array
   stack = lex stack unless stack instanceof Array
   obj = {}
   key = group = ''
-  last = \newline
+  last = type: \newline
   while tok = stack.shift!
     switch tok.type
+    case \comment =>
     case \newline =>
       # newlines come after values or groups or other whitespace
-      err "Expected value" tok if last is \assign
+      err "Expected value" (last => &column++) if last.type is \assign
     case \string \integer \float \boolean \datetime =>
       # values exist only after assigns (and in arrays but they're parsed elsewhere)
-      if last is \assign
+      if last.type is \assign
       then set obj, key, tok.value
       else err "Unexpected value" tok
     case \id =>
       # IDs only exist at the start of a line
-      if last is \newline
+      if last.type is \newline
       then key = (group or '') + tok.value
       else err "Unexpected key" tok
     case \assign =>
       # assignments can only occur on IDs
-      err "Unexpected assign" tok unless last is \id
+      err "Unexpected assign" tok unless last.type is \id
     case \arr_open =>
       # arrays are values
-      if last is \assign
+      if last.type is \assign
       then set obj, key, parse-array stack
       else err "Unexpected value" tok
     case \group =>
@@ -154,7 +146,7 @@ parse = (stack) ->
         default => err "Duplicate property `#group#&`" tok
       group = tok.value + \.
     default => err "Unexpected `#{if tok.value is \n then \newline else tok.value}`" tok
-    last = tok.type
+    last = tok
   obj
 
 export lex, parse
