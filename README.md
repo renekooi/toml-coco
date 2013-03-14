@@ -88,12 +88,20 @@ Quotes and other special characters must be escaped.
 Here is the list of special characters.
 
 ```
-\0 - null character  (0x00)
-\t - tab             (0x09)
-\n - newline         (0x0a)
-\r - carriage return (0x0d)
-\" - quote           (0x22)
-\\ - backslash       (0x5c)
+\t   - tab             (0x09)
+\n   - newline         (0x0a)
+\r   - carriage return (0x0d)
+\"   - quote           (0x22)
+\\   - backslash       (0x5c)
+\xXX - byte            (0x00-0xFF)
+```
+
+Of special note is the arbitrary byte syntax `\xXX` where each `X` is a hex
+digit `[0-9a-fA-F]`. This is useful for expressing non-UTF8 encoded strings.
+
+```toml
+name      = "Jos\x82"             # "José" in latin1 encoding.
+binary_ip = "\x0A\x00\x00\x01"    # 10.0.0.1 as a four byte binary.
 ```
 
 Other special characters are reserved and, if used, TOML should produce an
@@ -188,9 +196,10 @@ apart from arrays because arrays are only ever values.
 ```
 
 Under that, and until the next key or EOF are the key/values of that key group.
-keys are on the left of the equals sign and values are on the right. Keys start
+Keys are on the left of the equals sign and values are on the right. Keys start
 with the first non-whitespace character and end with the last non-whitespace
-character before the equals sign.
+character before the equals sign. Key/value pairs within key groups are
+unordered.
 
 ```toml
 [keygroup]
@@ -271,6 +280,7 @@ note the commit SHA1 or version tag that your parser supports in your Readme.
 - Clojure (@manicolosi) - https://github.com/manicolosi/clojoml
 - CoffeeScript (@biilmann) - https://github.com/biilmann/coffee-toml
 - Erlang - https://github.com/kalta/etoml.git
+- Erlang - https://github.com/kaos/tomle
 - Go (@thompelletier) - https://github.com/pelletier/go-toml
 - Go (@laurent22) - https://github.com/laurent22/toml-go
 - Go w/ Reflection (@BurntSushi) - https://github.com/BurntSushi/toml
@@ -279,6 +289,8 @@ note the commit SHA1 or version tag that your parser supports in your Readme.
 - Java (@johnlcox) - https://github.com/johnlcox/toml4j
 - Java (@mwanji) - https://github.com/mwanji/toml4j
 - Java - https://github.com/asafh/jtoml
+- Java w/ ANTLR (@MatthiasSchuetz) - https://github.com/mschuetz/toml
+- Julia (@pygy) - https://github.com/pygy/TOML.jl
 - Literate CoffeeScript (@JonathanAbrams) - https://github.com/JonAbrams/tomljs
 - node.js - https://github.com/aaronblohowiak/toml
 - node.js/browser - https://github.com/ricardobeat/toml.js (npm install tomljs)
@@ -304,6 +316,7 @@ note the commit SHA1 or version tag that your parser supports in your Readme.
 - Ruby (@jm) - https://github.com/jm/toml (toml gem)
 - Ruby (@eMancu) - https://github.com/eMancu/toml-rb (toml-rb gem)
 - Ruby (@charliesome) - https://github.com/charliesome/toml2 (toml2 gem)
+- Ruby (@sandeepravi) - https://github.com/sandeepravi/tomlp (tomlp gem)
 - Scala - https://github.com/axelarge/tomelette
 
 Validators
@@ -315,4 +328,10 @@ Editor support
 --------------
 
 - Emacs (@dryman) - https://github.com/dryman/toml-mode.el
+- Sublime Text 2 (@lmno) - https://github.com/lmno/TOML
+- TextMate (@infininight) - https://github.com/textmate/toml.tmbundle
 - Vim (@cespare) - https://github.com/cespare/vim-toml
+
+Encoder
+--------------
+- PHP (@ayushchd) - https://github.com/ayushchd/php-toml-encoder
